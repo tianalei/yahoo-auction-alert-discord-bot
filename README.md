@@ -1,5 +1,15 @@
 # Yahoo Auction and Mercari Discord Bot
 
+# Customize for zhCN & Using Mercari Python API wrapper
+
+```python
+
+nohup python main_zhcn.py
+
+```
+
+
+# Original version
 This project is a Discord bot designed to find newly posted articles on Yahoo Auction and Mercari and alert the user on a Discord server. The bot employs an unofficial Google Translator API to translate the article names from Japanese, which can occasionally result in instability.
 
 ## Installation
