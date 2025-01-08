@@ -6,7 +6,7 @@ import asyncio
 from easygoogletranslate import EasyGoogleTranslate
 from logging import info
 from yahoo import check_yahoo_auctions
-from mercari_takekun import check_mercari
+from mercari_v2 import check_mercari
 
 #from keep_alive import keep_alive  --- replit
 #keep_alive()
@@ -37,7 +37,7 @@ async def check_alerts() -> None:
           await check_mercari(bot, alert)
         except Exception as e:
           info(f"Error: {e}")
-      await asyncio.sleep(10)
+      await asyncio.sleep(1)
 
     info(
         f"Done checking alerts. Sleeping for {os.getenv('CHECK_INTERVAL', 60)}s..."
@@ -97,5 +97,5 @@ async def alerts(ctx: lightbulb.SlashContext) -> None:
 
 
 if __name__ == "__main__":
-  bot.run(activity=hikari.Activity(name="ZenMarket items",
+  bot.run(activity=hikari.Activity(name="Mercari items",
                                    type=hikari.ActivityType.WATCHING))

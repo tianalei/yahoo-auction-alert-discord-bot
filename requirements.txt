@@ -24,11 +24,10 @@ urllib3==2.2.0
 yarl==1.9.4
 aiodns==3.0.0
 async-timeout==4.0.2
-attrs==22.2.0
 banal==1.0.6
-certifi==2023.5.7
 ciso8601==2.3.0
 hikari-miru==3.0.2
 orjson==3.8.12
 pycares==4.3.0
 pycparser==2.21
+mercapi==0.4.2
