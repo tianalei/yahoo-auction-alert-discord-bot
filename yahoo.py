@@ -30,7 +30,7 @@ async def check_yahoo_auctions(
 
         if item["AuctionID"]:
             embed.url = (
-                "https://zenmarket.jp/fr/auction.aspx?itemCode=" + item["AuctionID"]
+                "https://zenmarket.jp/cn/auction.aspx?itemCode=" + item["AuctionID"]
             )
 
         if item["Thumbnail"]:
@@ -38,12 +38,12 @@ async def check_yahoo_auctions(
 
         if item["PriceBidOrBuyTextControl"]:
             dom = parseString(item["PriceBidOrBuyTextControl"])
-            price = dom.getElementsByTagName("span")[0].getAttribute("data-eur")
+            price = dom.getElementsByTagName("span")[0].getAttribute("data-cny")
             embed.add_field("Instant price", price)
 
         if item["PriceTextControl"]:
             dom = parseString(item["PriceTextControl"])
-            price = dom.getElementsByTagName("span")[0].getAttribute("data-eur")
+            price = dom.getElementsByTagName("span")[0].getAttribute("data-cny")
             embed.add_field("Bid price", price)
 
         embed.set_footer(f"Source: Yahoo Auction — #{item['AuctionID']}")

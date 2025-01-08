@@ -24,6 +24,19 @@ async def check_mercari(bot: BotApp, alert: dict) -> None:
         embed = Embed()
         embed.color = Color(0x09B1BA)
         embed.title = item["ClearTitle"] or "Unknown"
+        
+        # original url
+        resItem = requests.get(
+            f"https://zenmarket.jp/cn/mercariproduct.aspx?itemCode={item['ItemCode']}"
+        )  # html
+        soup = BeautifulSoup(resItem.text, 'html.parser')
+        item_mercari_url = ""
+        for link in soup.find_all('a', href=True):
+        if link['href'].startswith('https://jp.mercari.com/item/'):
+            print(link['href'])
+            item_mercari_url = link['href']
+            break
+        embed.add_field("Mercari", item_mercari_url)
 
         if item["ItemCode"]:
             embed.url = (
@@ -37,8 +50,11 @@ async def check_mercari(bot: BotApp, alert: dict) -> None:
         if item["PriceTextControl"]:
             try:
                 dom = parseString(item["PriceTextControl"])
-                price = dom.getElementsByTagName("span")[0].getAttribute("data-eur")
-                embed.add_field("Price", price)
+                price = dom.getElementsByTagName("span")[0].getAttribute("data-cny")[:-1]
+                parts = price.split('.')
+                price = parts[0] if len(parts) >= 1 else price
+                # embed.add_field("Price", price)
+                embed.title = "¥ " + price + " " + embed.title
             except:
                 pass
 
