@@ -1,4 +1,7 @@
 import os
+import dotenv
+dotenv.load_dotenv()
+
 import lightbulb
 import hikari
 import dataset
