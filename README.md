@@ -42,7 +42,7 @@
 **Execution**:
 ```bash
 # Start the bot in background with automatic logging
-nohup python main_zhcn.py > bot.log 2>&1 &
+nohup python main.py > bot.log 2>&1 &
 
 # Monitor logs (optional)
 tail -f bot.log

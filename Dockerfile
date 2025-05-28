@@ -19,4 +19,4 @@ COPY . /app
 VOLUME ["/app/data"]
 ENV DATA_DIR=/app/data
 
-CMD ["python", "main_zhcn.py"] 
+CMD ["python", "main.py"] 
