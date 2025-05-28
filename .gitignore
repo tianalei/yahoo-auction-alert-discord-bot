@@ -1,6 +1,15 @@
+.DS_Store
 .vscode
 .venv
 .env
 *.out
 *.db*
 __pycache__
+.cursor/rules/
+_archive/
+_refs/
+test/
+alerts.txt
+run.sh
+data/
+.dockerignore
