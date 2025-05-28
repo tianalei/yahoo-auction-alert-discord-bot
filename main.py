@@ -36,6 +36,7 @@ translator = EasyGoogleTranslate(source_language="ja",
                                  target_language=lan,
                                  timeout=10)
 
+exchange_rate = float(os.getenv("EXCHANGE_RATE", 0.0530))
 
 def _calculate_do_not_run_sleep_details(
     now: datetime.datetime, 
@@ -127,7 +128,7 @@ async def check_alerts() -> None:
 
       if os.getenv("ENABLE_MERCARI", "true") == "true":
         try:
-          await check_mercari(bot, alert, translator)
+          await check_mercari(bot, alert, translator, exchange_rate)
         except Exception as e:
           info(f"Error checking Mercari for {alert['name']}: {e}")
       await asyncio.sleep(1) # Brief pause between checking each alert item

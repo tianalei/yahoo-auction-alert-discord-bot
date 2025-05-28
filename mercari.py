@@ -14,10 +14,8 @@ import logging
 logging.basicConfig()
 logging.getLogger().setLevel(logging.DEBUG)
 
-huilv = 0.0530
 
-
-async def check_mercari(bot: BotApp, alert: dict, translator: EasyGoogleTranslate) -> None:
+async def check_mercari(bot: BotApp, alert: dict, translator: EasyGoogleTranslate, exchange_rate: float) -> None:
   m = Mercapi()
   results = await m.search(alert['name'])
   results.items.sort(key=lambda item: item.created, reverse=True)
@@ -25,7 +23,7 @@ async def check_mercari(bot: BotApp, alert: dict, translator: EasyGoogleTranslat
     if bot.d.synced.find_one(name=item.id_):
       info(f"[mercari] item.id:{item.id_} already synced — up to date")
       continue
-    item_price = str(int(item.price * huilv))
+    item_price = str(int(item.price * exchange_rate))
 
     embed = Embed()
     item_name_zh = translator.translate(item.name)
