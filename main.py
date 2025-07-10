@@ -7,7 +7,10 @@ import hikari
 import dataset
 import asyncio
 from easygoogletranslate import EasyGoogleTranslate
+
+import logging
 from logging import info
+
 from yahoo import check_yahoo_auctions
 from mercari import check_mercari
 import datetime
@@ -16,6 +19,29 @@ from zoneinfo import ZoneInfo
 
 #from keep_alive import keep_alive  --- replit
 #keep_alive()
+
+# Logging settigns
+logging.basicConfig()
+def set_log_level():
+  log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+  # 支持字符串格式的日志级别
+  log_levels = {
+      "DEBUG": logging.DEBUG,
+      "INFO": logging.INFO, 
+      "WARNING": logging.WARNING,
+      "WARN": logging.WARNING,  # 简写形式
+      "ERROR": logging.ERROR,
+      "CRITICAL": logging.CRITICAL
+  }
+  if log_level_str in log_levels:
+    logging.getLogger().setLevel(log_levels[log_level_str])
+    info(f"set log level to {log_level_str}")
+  else:
+    # 无效输入时使用默认值
+    logging.getLogger().setLevel(logging.INFO)
+    info(f"Invalid LOG_LEVEL '{log_level_str}', using INFO as default")
+
+set_log_level()
 
 # Connect to database file
 ENV = os.getenv('ENV', 'dev').lower()
