@@ -49,16 +49,14 @@ async def check_yahoo_auctions(
             thumbnail_image_url = None
             price_display = None
 
-            name_link_el = item_element.select_one("a.auction-url")
+            name_link_el = item_element.select_one('a.auction-url[href*="itemCode="]')
             if not name_link_el:
-                 name_link_el = item_element.select_one("div.item-details-lot-title a")
+                name_link_el = item_element.select_one("div.translate a.auction-url")
+            if not name_link_el:
+                name_link_el = item_element.select_one("div.item-details-lot-title a")
 
             if name_link_el:
-                title_text_el = name_link_el.select_one("span.lot-name-inner-text")
-                if title_text_el:
-                    title = title_text_el.get_text(strip=True)
-                else:
-                    title = name_link_el.get_text(strip=True)
+                title = name_link_el.get_text(strip=True)
 
                 raw_item_url = name_link_el.get('href')
                 if raw_item_url:
@@ -68,7 +66,12 @@ async def check_yahoo_auctions(
                         auction_id = auction_id_param.split('&')[0]
             
             if not auction_id:
-                auction_id_attr = item_element.get('data-id') or item_element.get('data-auction-id')
+                auction_id_el = item_element.select_one("[data-auctionid]")
+                auction_id_attr = (
+                    item_element.get('data-id')
+                    or item_element.get('data-auction-id')
+                    or (auction_id_el.get('data-auctionid') if auction_id_el else None)
+                )
                 if auction_id_attr:
                     auction_id = auction_id_attr
                 else:
@@ -89,25 +92,16 @@ async def check_yahoo_auctions(
             if price_el_cny:
                 price_cny_value = price_el_cny.get('data-cny')
                 if price_cny_value:
-                     price_display = f"{price_cny_value} CNY"
+                    price_display = price_cny_value.strip()
             
             if not price_display:
                 price_el_jpy = item_element.select_one("span.amount[data-jpy], span.price[data-jpy], .item-price__price[data-jpy]")
                 if price_el_jpy:
                     price_jpy_value = price_el_jpy.get('data-jpy')
                     if price_jpy_value:
-                        price_display = f"{price_jpy_value} JPY"
-            
-            if not price_display:
-                price_text_el = item_element.select_one("div.auction-price span.amount") or \
-                                item_element.select_one("p.item-price") or \
-                                item_element.select_one("span.productDescPrice")
-                if price_text_el:
-                    price_text = price_text_el.get_text(strip=True)
-                    if price_text:
-                         price_display = price_text
+                        price_display = price_jpy_value.strip()
 
-            time_remaining_el = item_element.select_one("div.col-md-7 div > span.glyphicon-time")
+            time_remaining_el = item_element.select_one("span.glyphicon-time")
             time_remaining_text = None
             if time_remaining_el and time_remaining_el.parent:
                 time_remaining_text = time_remaining_el.parent.get_text(strip=True)
