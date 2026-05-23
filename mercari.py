@@ -4,7 +4,8 @@ from easygoogletranslate import EasyGoogleTranslate
 from mercapi import Mercapi
 
 from logging import info
-from notifier import AlertField, AlertPayload, LinkButton, Notifier
+from notifier import AlertField, AlertPayload, BarkNotifier, LinkButton, Notifier
+from utils import format_relative_updated
 
 
 async def check_mercari(
@@ -28,7 +29,11 @@ async def check_mercari(
     item_url = f"https://jp.mercari.com/item/{item.id_}"
     item_name_zh = translator.translate(item.name)
     item_title = item_name_zh or "Unknown"
-    display_title = f"[m]{item_price}¥ {item_title}]"
+    if isinstance(notifier, BarkNotifier):
+        updated_ago = format_relative_updated(item.updated)
+        display_title = f"[m] {item_price}¥ [{updated_ago}] {item_title}"
+    else:
+        display_title = f"[m]{item_price}¥ ◼️{item_title}]"
 
     info(f"[mercari] new item found! {item.id_} {item_name_zh or 'Unknown'}")
     fmt = '%Y年%-m月%-d日 %-H:%M:%S'

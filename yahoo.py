@@ -113,7 +113,7 @@ async def check_yahoo_auctions(
 
             price_text = f"{price_display}" if price_display else "未知"
             time_text = f"⌛️{time_remaining_text}" if time_remaining_text else ""
-            display_title = f"[y]{price_text}¥ {time_text} {display_title}"
+            display_title = f"[y]{price_text}¥ {time_text} ◼️{display_title}"
 
             yahoo_auction_url = f"https://auctions.yahoo.co.jp/jp/auction/{auction_id}"
             payload = AlertPayload(
