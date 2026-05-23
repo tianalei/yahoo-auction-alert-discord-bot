@@ -1,223 +1,234 @@
 import os
-import dotenv
-dotenv.load_dotenv()
-
-import lightbulb
-import hikari
-import dataset
 import asyncio
-from easygoogletranslate import EasyGoogleTranslate
-
+import datetime
 import logging
 from logging import info
-
-from yahoo import check_yahoo_auctions
-from mercari import check_mercari
-import datetime
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
-#from keep_alive import keep_alive  --- replit
-#keep_alive()
+import dotenv
+import dataset
+from easygoogletranslate import EasyGoogleTranslate
 
-# Logging settigns
-logging.basicConfig()
-def set_log_level():
-  log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
-  # 支持字符串格式的日志级别
-  log_levels = {
-      "DEBUG": logging.DEBUG,
-      "INFO": logging.INFO, 
-      "WARNING": logging.WARNING,
-      "WARN": logging.WARNING,  # 简写形式
-      "ERROR": logging.ERROR,
-      "CRITICAL": logging.CRITICAL
-  }
-  if log_level_str in log_levels:
-    logging.getLogger().setLevel(log_levels[log_level_str])
-    info(f"set log level to {log_level_str}")
-  else:
-    # 无效输入时使用默认值
-    logging.getLogger().setLevel(logging.INFO)
-    info(f"Invalid LOG_LEVEL '{log_level_str}', using INFO as default")
+dotenv.load_dotenv()
 
-set_log_level()
+from config_loader import AppConfig, get_db_path, load_config, setup_logging
+from notifier import create_notifier
+from yahoo import check_yahoo_auctions
+from mercari import check_mercari
 
-# Connect to database file
-ENV = os.getenv('ENV', 'dev').lower()
-if ENV == 'prod':
-    db_file = '/app/data/alerts.db'
-elif ENV == 'dev':
-    base_dir = os.path.abspath(os.path.dirname(__file__))
-    db_file = os.path.join(base_dir, 'data', 'alerts.db')
+cfg: AppConfig = load_config()
+setup_logging(cfg.log_level)
+
+db_file = get_db_path()
 info(f"db_path: {db_file}")
 db = dataset.connect(f"sqlite:///{db_file}")
+synced_table = db["synced_alerts"]
+alerts_table = db["alerts"]
 
-bot = lightbulb.BotApp(os.environ["BOT_TOKEN"])
-bot.d.table = db["alerts"]
-bot.d.synced = db["synced_alerts"]
+translator = EasyGoogleTranslate(
+    source_language="ja",
+    target_language=cfg.language,
+    timeout=10,
+)
 
-lan = os.getenv("LANGUAGE", "zh-CN")
-translator = EasyGoogleTranslate(source_language="ja",
-                                 target_language=lan,
-                                 timeout=10)
-
-exchange_rate = float(os.getenv("EXCHANGE_RATE", 0.0530))
 
 def _calculate_do_not_run_sleep_details(
-    now: datetime.datetime, 
-    do_not_run_start_hour: int, 
-    do_not_run_end_hour: int
+    now: datetime.datetime,
+    do_not_run_start_hour: int,
+    do_not_run_end_hour: int,
 ) -> Tuple[bool, float, Optional[datetime.datetime]]:
-    """
-    Calculates if current time is within the 'do not run' window.
-
-    Returns:
-        A tuple: (is_in_window, sleep_duration_seconds, target_end_datetime).
-    """
     current_hour = now.hour
     is_in_window = False
 
-    if do_not_run_start_hour == do_not_run_end_hour: # Feature disabled
+    if do_not_run_start_hour == do_not_run_end_hour:
         return False, 0.0, None
-    
-    if do_not_run_start_hour < do_not_run_end_hour: # Normal window (e.g., 2:00 to 6:00)
+
+    if do_not_run_start_hour < do_not_run_end_hour:
         if do_not_run_start_hour <= current_hour < do_not_run_end_hour:
             is_in_window = True
-    else: # Overnight window (e.g., 22:00 to 6:00)
+    else:
         if current_hour >= do_not_run_start_hour or current_hour < do_not_run_end_hour:
             is_in_window = True
 
     if not is_in_window:
         return False, 0.0, None
 
-    # If in window, calculate sleep duration
-    target_end_hour_dt_today = now.replace(hour=do_not_run_end_hour, minute=0, second=0, microsecond=0)
-    actual_target_end_datetime = None
+    target_end_hour_dt_today = now.replace(
+        hour=do_not_run_end_hour, minute=0, second=0, microsecond=0
+    )
 
     if do_not_run_start_hour < do_not_run_end_hour:
         actual_target_end_datetime = target_end_hour_dt_today
-    else: # Overnight window
+    else:
         if current_hour >= do_not_run_start_hour:
             actual_target_end_datetime = target_end_hour_dt_today + datetime.timedelta(days=1)
         else:
             actual_target_end_datetime = target_end_hour_dt_today
-    
-    sleep_duration_seconds = (actual_target_end_datetime - now).total_seconds()
 
-    if sleep_duration_seconds <= 0: # Fallback for boundary conditions
-        sleep_duration_seconds = 1.0 # Sleep for at least 1 second
+    sleep_duration_seconds = (actual_target_end_datetime - now).total_seconds()
+    if sleep_duration_seconds <= 0:
+        sleep_duration_seconds = 1.0
 
     return True, sleep_duration_seconds, actual_target_end_datetime
 
 
-async def check_alerts() -> None:
-  do_not_run_start_hour = int(os.getenv("DO_NOT_RUN_START_HOUR", "0"))
-  do_not_run_end_hour = int(os.getenv("DO_NOT_RUN_END_HOUR", "6"))
-  check_interval_seconds = int(os.getenv("CHECK_INTERVAL", "60"))
-  timezone_str = os.getenv("TZ", "Asia/Shanghai")
-
-  try:
-    app_timezone = ZoneInfo(timezone_str)
-  except Exception as e:
-    info(f"Error loading timezone '{timezone_str}': {e}. Defaulting to UTC.")
-    app_timezone = ZoneInfo("UTC")
-
-  while True:
-    now = datetime.datetime.now(app_timezone)
-    info(f"Current time: {now.strftime('%Y-%m-%d %H:%M:%S')}, set timezone: {app_timezone}, use timezone: {timezone_str}")
-    
-    is_in_do_not_run_window, sleep_duration, target_end_dt = _calculate_do_not_run_sleep_details(
-        now, do_not_run_start_hour, do_not_run_end_hour
-    )
-    
-    if is_in_do_not_run_window and target_end_dt:
-      info(
-          f"Current time ({now.strftime('%H:%M:%S')}) is within the 'do not run' window "
-          f"({do_not_run_start_hour:02d}:00 - {do_not_run_end_hour:02d}:00). "
-          f"Sleeping for {sleep_duration:.0f} seconds until approximately {target_end_dt.strftime('%Y-%m-%d %H:%M:%S')}."
-      )
-      await asyncio.sleep(sleep_duration)
-      continue 
-
-    # --- Alert Checking Logic ---
-    alerts = bot.d.table.all()
+async def _run_check_cycle(
+    alerts: List[dict],
+    notifier,
+    *,
+    enable_yahoo: bool,
+    enable_mercari: bool,
+) -> bool:
     active_alerts_found = False
     for alert in alerts:
-      active_alerts_found = True
-      info(f"Searching for {alert['name']}...")
-      if os.getenv("ENABLE_YAHOO_AUCTION", "true") == "true":
-        try:
-          await check_yahoo_auctions(bot, alert, translator)
-        except Exception as e:
-          info(f"Error checking Yahoo Auctions for {alert['name']}: {e}")
-
-      if os.getenv("ENABLE_MERCARI", "true") == "true":
-        try:
-          await check_mercari(bot, alert, translator, exchange_rate)
-        except Exception as e:
-          info(f"Error checking Mercari for {alert['name']}: {e}")
-      await asyncio.sleep(1) # Brief pause between checking each alert item
-
-    if active_alerts_found:
-        info(f"Done checking all active alerts. Sleeping for {check_interval_seconds}s...")
-    else:
-        info(f"No active alerts to check. Sleeping for {check_interval_seconds}s...")
-        
-    await asyncio.sleep(check_interval_seconds)
+        active_alerts_found = True
+        info(f"Searching for {alert['name']}...")
+        if enable_yahoo:
+            try:
+                await check_yahoo_auctions(alert, translator, notifier, synced_table)
+            except Exception as e:
+                info(f"Error checking Yahoo Auctions for {alert['name']}: {e}")
+        if enable_mercari:
+            try:
+                await check_mercari(
+                    alert, translator, cfg.exchange_rate, notifier, synced_table
+                )
+            except Exception as e:
+                info(f"Error checking Mercari for {alert['name']}: {e}")
+        await asyncio.sleep(1)
+    return active_alerts_found
 
 
-@bot.listen()
-async def on_ready(event: hikari.StartingEvent) -> None:
-  info("Starting event loop for alert checks...")
-  asyncio.create_task(check_alerts())
+async def check_alerts_loop(alerts_provider, notifier) -> None:
+    try:
+        app_timezone = ZoneInfo(cfg.timezone)
+    except Exception as e:
+        info(f"Error loading timezone '{cfg.timezone}': {e}. Defaulting to UTC.")
+        app_timezone = ZoneInfo("UTC")
+
+    while True:
+        now = datetime.datetime.now(app_timezone)
+        info(
+            f"Current time: {now.strftime('%Y-%m-%d %H:%M:%S')}, "
+            f"timezone: {cfg.timezone}"
+        )
+
+        is_in_window, sleep_duration, target_end_dt = _calculate_do_not_run_sleep_details(
+            now, cfg.do_not_run_start_hour, cfg.do_not_run_end_hour
+        )
+        if is_in_window and target_end_dt:
+            info(
+                f"Current time ({now.strftime('%H:%M:%S')}) is within the 'do not run' window "
+                f"({cfg.do_not_run_start_hour:02d}:00 - {cfg.do_not_run_end_hour:02d}:00). "
+                f"Sleeping for {sleep_duration:.0f} seconds until approximately "
+                f"{target_end_dt.strftime('%Y-%m-%d %H:%M:%S')}."
+            )
+            await asyncio.sleep(sleep_duration)
+            continue
+
+        alerts = alerts_provider()
+        active = await _run_check_cycle(
+            alerts,
+            notifier,
+            enable_yahoo=cfg.enable_yahoo_auction,
+            enable_mercari=cfg.enable_mercari,
+        )
+        if active:
+            info(f"Done checking all active alerts. Sleeping for {cfg.check_interval}s...")
+        else:
+            info(f"No active alerts to check. Sleeping for {cfg.check_interval}s...")
+        await asyncio.sleep(cfg.check_interval)
 
 
-@bot.command
-@lightbulb.option("name", "Name of the item to register.", required=True)
-@lightbulb.command("register",
-                   "Register a new alert for an item.",
-                   pass_options=True)
-@lightbulb.implements(lightbulb.SlashCommand)
-async def register(ctx: lightbulb.SlashContext, name: str) -> None:
-  if any(True for _ in bot.d.table.find(name=name)):
-    await ctx.respond(f"Alert for **{name}** already exists!")
-    return
+def run_bark_mode() -> None:
+    if not os.getenv("BARK_KEY", "").strip():
+        raise ValueError("BARK_KEY is required when notification mode is bark")
 
-  bot.d.table.insert({
-      "user_id": ctx.author.id,
-      "channel_id": ctx.channel_id,
-      "name": name,
-  })
-  await ctx.respond(f"Registered alert for **{name}**!")
+    notifier = create_notifier("bark")
+    info("Starting in bark mode (no Discord components)")
+
+    def alerts_provider():
+        return cfg.alerts
+
+    asyncio.run(check_alerts_loop(alerts_provider, notifier))
 
 
-@bot.command
-@lightbulb.option("name", "Name of the item to delete.", required=True)
-@lightbulb.command("unregister", "Delete an alert", pass_options=True)
-@lightbulb.implements(lightbulb.SlashCommand)
-async def unregister(ctx: lightbulb.SlashContext, name: str) -> None:
-  if not bot.d.table.find_one(name=name):
-    await ctx.respond(f"Alert for **{name}** does not exist!")
-    return
+def run_discord_mode() -> None:
+    import lightbulb
+    import hikari
 
-  bot.d.table.delete(name=name, user_id=ctx.author.id)
-  await ctx.respond(f"Unregistered alert for **{name}**!")
+    bot_token = os.environ.get("BOT_TOKEN")
+    if not bot_token:
+        raise ValueError("BOT_TOKEN is required when notification mode is discord")
 
+    bot = lightbulb.BotApp(bot_token)
+    bot.d.table = alerts_table
+    bot.d.synced = synced_table
+    notifier = create_notifier("discord", bot=bot)
 
-@bot.command
-@lightbulb.command("alerts", "List alerts")
-@lightbulb.implements(lightbulb.SlashCommand)
-async def alerts(ctx: lightbulb.SlashContext) -> None:
-  alerts = bot.d.table.find(user_id=ctx.author.id)
-  if all(False for _ in alerts):
-    await ctx.respond("You have no alerts!")
-    return
+    @bot.listen()
+    async def on_ready(event: hikari.StartingEvent) -> None:
+        info("Starting event loop for alert checks (discord mode)...")
 
-  await ctx.respond("\n".join([f"{alert['name']}" for alert in alerts])
-                    or "None")
+        def alerts_provider():
+            return list(bot.d.table.all())
+
+        asyncio.create_task(check_alerts_loop(alerts_provider, notifier))
+
+    @bot.command
+    @lightbulb.option("name", "Name of the item to register.", required=True)
+    @lightbulb.command(
+        "register", "Register a new alert for an item.", pass_options=True
+    )
+    @lightbulb.implements(lightbulb.SlashCommand)
+    async def register(ctx: lightbulb.SlashContext, name: str) -> None:
+        if any(True for _ in bot.d.table.find(name=name)):
+            await ctx.respond(f"Alert for **{name}** already exists!")
+            return
+        bot.d.table.insert({
+            "user_id": ctx.author.id,
+            "channel_id": ctx.channel_id,
+            "name": name,
+        })
+        await ctx.respond(f"Registered alert for **{name}**!")
+
+    @bot.command
+    @lightbulb.option("name", "Name of the item to delete.", required=True)
+    @lightbulb.command("unregister", "Delete an alert", pass_options=True)
+    @lightbulb.implements(lightbulb.SlashCommand)
+    async def unregister(ctx: lightbulb.SlashContext, name: str) -> None:
+        if not bot.d.table.find_one(name=name):
+            await ctx.respond(f"Alert for **{name}** does not exist!")
+            return
+        bot.d.table.delete(name=name, user_id=ctx.author.id)
+        await ctx.respond(f"Unregistered alert for **{name}**!")
+
+    @bot.command
+    @lightbulb.command("alerts", "List alerts")
+    @lightbulb.implements(lightbulb.SlashCommand)
+    async def alerts_cmd(ctx: lightbulb.SlashContext) -> None:
+        user_alerts = bot.d.table.find(user_id=ctx.author.id)
+        if all(False for _ in user_alerts):
+            await ctx.respond("You have no alerts!")
+            return
+        await ctx.respond(
+            "\n".join([f"{a['name']}" for a in user_alerts]) or "None"
+        )
+
+    info("Starting in discord mode")
+    bot.run(
+        activity=hikari.Activity(
+            name="New items", type=hikari.ActivityType.WATCHING
+        )
+    )
 
 
 if __name__ == "__main__":
-  bot.run(activity=hikari.Activity(name="New items", # Simplified activity message
-                                   type=hikari.ActivityType.WATCHING))
+    info(f"Notification mode: {cfg.notification}")
+    if cfg.notification == "bark":
+        run_bark_mode()
+    elif cfg.notification == "discord":
+        run_discord_mode()
+    else:
+        raise ValueError(f"Unsupported notification mode: {cfg.notification}")

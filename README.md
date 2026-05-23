@@ -64,19 +64,23 @@ tail -f bot.log
 ./deploy.sh
 ```
 
-### Method 3: Docker Container (⌛️ Not implemented yet)
+### Method 3: Docker Compose
 
 **Prerequisites**:  
-1. Configure your `docker-compose.yml` file
-2. Ensure Docker daemon is running
+1. Ensure Docker daemon is running
+2. Configure `.env` for secrets only:
+   - `BARK_KEY` when `notification: bark`
+   - `BOT_TOKEN` when `notification: discord`
+3. Configure non-sensitive runtime settings in `config.yaml`:
+   - `notification`, `check_interval`, `timezone`, `alerts`, etc.
 
 **Execution**:
 ```bash
 # Start container in detached mode
-docker-compose up -d
+docker compose up -d
 
 # Monitor container logs (optional)
-docker logs -f yahoo-mercari-discord-bot_1
+docker logs -f yahoo-mercari-alert-bot
 ```
 
 ## Original README

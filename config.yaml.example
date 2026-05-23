@@ -1,0 +1,19 @@
+# Non-sensitive application settings (secrets stay in .env)
+
+notification: bark  # bark | discord
+
+check_interval: 3
+do_not_run_start_hour: 2
+do_not_run_end_hour: 6
+timezone: Asia/Shanghai
+language: zh-CN
+exchange_rate: 0.0470
+log_level: INFO
+
+enable_yahoo_auction: true
+enable_mercari: true
+
+# Keywords monitored in bark mode (discord mode uses slash commands + SQLite)
+alerts:
+  - keyword1
+  - keyword2

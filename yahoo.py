@@ -3,13 +3,15 @@ from logging import info
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, quote_plus
 from easygoogletranslate import EasyGoogleTranslate
-from lightbulb import BotApp
-import hikari
-from hikari import Embed, Color
+
+from notifier import AlertPayload, LinkButton, Notifier
 
 
 async def check_yahoo_auctions(
-    bot: BotApp, alert: dict, translator: EasyGoogleTranslate
+    alert: dict,
+    translator: EasyGoogleTranslate,
+    notifier: Notifier,
+    synced_table,
 ) -> None:
     try:
         encoded_query = quote_plus(alert['name'])
@@ -78,7 +80,7 @@ async def check_yahoo_auctions(
                     info(f"[yahoo] Could not extract auction ID for an item. Raw link: {raw_item_url if 'raw_item_url' in locals() else 'N/A'}. Skipping.")
                     continue
 
-            if bot.d.synced.find_one(name=auction_id):
+            if synced_table.find_one(name=auction_id):
                 info(f"[yahoo] auction_id: {auction_id} already synced — up to date")
                 continue
 
@@ -106,32 +108,26 @@ async def check_yahoo_auctions(
             if time_remaining_el and time_remaining_el.parent:
                 time_remaining_text = time_remaining_el.parent.get_text(strip=True)
 
-            embed = Embed()
-            embed.color = Color(0x09B1BA)
             translated_title = translator.translate(title)
-            embed.title = translated_title if translated_title and translated_title.strip() else title
+            display_title = translated_title if translated_title and translated_title.strip() else title
 
-            if item_page_url:
-                embed.url = item_page_url
+            price_text = f"{price_display}" if price_display else "未知"
+            time_text = f"⌛️{time_remaining_text}" if time_remaining_text else ""
+            display_title = f"[y]{price_text}¥ {time_text} {display_title}"
 
-            if thumbnail_image_url:
-                embed.set_image(thumbnail_image_url)
-
-            if price_display:
-                embed.add_field("Price", price_display)
-
-            if time_remaining_text:
-                embed.add_field("Time Remaining", time_remaining_text)
-
-            embed.set_footer(f"Source: Yahoo Auction — #{auction_id}")
-
-            # Add Link Button
             yahoo_auction_url = f"https://auctions.yahoo.co.jp/jp/auction/{auction_id}"
-            action_row = hikari.impl.special_endpoints.MessageActionRowBuilder()\
-                .add_link_button(yahoo_auction_url, label="View on Yahoo Auction")
+            payload = AlertPayload(
+                title=display_title,
+                footer=f"Source: Yahoo Auction — #{auction_id}",
+                item_id=auction_id,
+                primary_url=item_page_url,
+                image_url=thumbnail_image_url,
+                fields=[],
+                link_buttons=[LinkButton("URL", yahoo_auction_url)],
+            )
 
-            await bot.rest.create_message(alert["channel_id"], embed=embed, components=[action_row])
-            bot.d.synced.insert({"name": auction_id})
+            await notifier.send(alert, payload)
+            synced_table.insert({"name": auction_id})
             info(f"[yahoo] Synced new item: auction_id: {auction_id} {title}")
 
     except Exception as e:

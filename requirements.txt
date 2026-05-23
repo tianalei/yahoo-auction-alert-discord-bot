@@ -10,6 +10,7 @@ httpx>=0.23.3 # For easygoogletranslate and mercapi
 # Data handling
 dataset>=1.6.0 # Includes SQLAlchemy, normality, banal
 python-dotenv>=0.21.1
+PyYAML>=6.0
 
 # Specific APIs
 easygoogletranslate>=0.0.4
